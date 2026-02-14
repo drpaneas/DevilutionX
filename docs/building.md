@@ -410,6 +410,37 @@ cmake --build build
 [PlayStation Vita manual](/docs/manual/platforms/vita.md)
 </details>
 
+<details><summary>Dreamcast</summary>
+
+### Dreamcast build
+
+### Installing dependencies
+
+- KallistiOS (KOS) and kos-ports
+- `mkdcdisc` from antiruins tools
+- `patch` utility available on the host system
+- `Packaging/dreamcast/cd_root/` prepared with `IP.BIN`
+- No external `fmt` patch is required. DevilutionX applies a bundled SH4 fix during the Dreamcast build.
+
+### Game data
+
+Put `DIABDAT.MPQ` in `Packaging/dreamcast/cd_root/` before building.
+If needed, see [Extracting MPQs from the GoG installer](https://github.com/diasurgical/devilutionX/wiki/Extracting-MPQs-from-the-GoG-installer).
+
+### Compiling
+
+```bash
+./Packaging/dreamcast/build.sh
+```
+
+### Output
+
+- `Packaging/dreamcast/devilutionx-playable.cdi`
+
+- [Dreamcast manual](/docs/manual/platforms/dreamcast.md)
+- [Dreamcast packaging readme](../Packaging/dreamcast/README.md)
+</details>
+
 
 <details><summary>Haiku</summary>
 
