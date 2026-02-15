@@ -43,6 +43,9 @@
 
 #ifdef UNPACKED_SAVES
 #include "utils/file_util.h"
+#ifdef __DREAMCAST__
+#include "platform/dreamcast/dc_save_lzo.hpp"
+#endif
 #else
 #include "mpq/mpq_reader.hpp"
 #endif
@@ -63,6 +66,19 @@ char hero_names[MAX_CHARACTERS][PlayerNameLength];
 
 std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 {
+#ifdef __DREAMCAST__
+	// Dreamcast VMU uses flat file structure - no directories.
+	// Save files become: /vmu/a1/dvx_s0_hero, /vmu/a1/dvx_s0_game, etc.
+	// Using underscore as separator instead of directory.
+	// "dvx" prefix identifies DevilutionX saves on VMU.
+	return StrCat(paths::PrefPath(), "dvx_", savePrefix,
+	    gbIsSpawn
+	        ? (gbIsMultiplayer ? "sh" : "sp") // share/spawn shortened for VMU
+	        : (gbIsMultiplayer ? "m" : "s"),  // multi/single shortened
+	    saveNum,
+	    gbIsHellfire ? "h_" : "_" // hellfire indicator + separator
+	);
+#else
 	return StrCat(paths::PrefPath(), savePrefix,
 	    gbIsSpawn
 	        ? (gbIsMultiplayer ? "share_" : "spawn_")
@@ -74,10 +90,17 @@ std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 	    gbIsHellfire ? ".hsv" : ".sv"
 #endif
 	);
+#endif
 }
 
 std::string GetStashSavePath()
 {
+#ifdef __DREAMCAST__
+	// Flat file for stash on Dreamcast
+	return StrCat(paths::PrefPath(), "dvx_",
+	    gbIsSpawn ? "stash_sp" : "stash",
+	    gbIsHellfire ? "h_" : "_");
+#else
 	return StrCat(paths::PrefPath(),
 	    gbIsSpawn ? "stash_spawn" : "stash",
 #ifdef UNPACKED_SAVES
@@ -86,6 +109,7 @@ std::string GetStashSavePath()
 	    gbIsHellfire ? ".hsv" : ".sv"
 #endif
 	);
+#endif
 }
 
 bool GetSaveNames(uint8_t index, std::string_view prefix, char *out)
@@ -243,8 +267,19 @@ bool ArchiveContainsGame(SaveReader &hsArchive)
 std::optional<SaveReader> CreateSaveReader(std::string &&path)
 {
 #ifdef UNPACKED_SAVES
+#ifdef __DREAMCAST__
+	if (path.empty())
+		return std::nullopt;
+	// For Dreamcast, path is a file prefix (e.g., "/vmu/a1/dvx_s0_")
+	// Check if the hero file exists to determine if save exists
+	const std::string heroPath = path + "hero";
+	if (!FileExists(heroPath))
+		return std::nullopt;
+#else
+	// For other platforms, path is a directory
 	if (!FileExists(path))
 		return std::nullopt;
+#endif
 	return SaveReader(std::move(path));
 #else
 	std::int32_t error;
@@ -541,6 +576,47 @@ std::unique_ptr<std::byte[]> SaveReader::ReadFile(const char *filename, std::siz
 	std::unique_ptr<std::byte[]> result;
 	error = 0;
 	const std::string path = dir_ + filename;
+
+#ifdef __DREAMCAST__
+	// For /ram/ filesystem, use regular file reads (no compression)
+	// For VMU paths, use LZO decompression
+	if (dir_.find("/ram/") == 0) {
+		uintmax_t size;
+		if (!GetFileSize(path.c_str(), &size)) {
+			error = 1;
+			return nullptr;
+		}
+		fileSize = size;
+		FILE *file = OpenFile(path.c_str(), "rb");
+		if (file == nullptr) {
+			error = 1;
+			return nullptr;
+		}
+		result.reset(new (std::nothrow) std::byte[size]);
+		if (!result) {
+			std::fclose(file);
+			error = 1;
+			return nullptr;
+		}
+		size_t bytesRead = std::fread(result.get(), 1, size, file);
+		if (bytesRead != size) {
+			std::fclose(file);
+			error = 1;
+			return nullptr;
+		}
+		std::fclose(file);
+		return result;
+	}
+	// VMU path - LZO compressed
+	size_t decompressedSize = 0;
+	result = dc::ReadCompressedFile(path.c_str(), decompressedSize);
+	if (!result) {
+		error = 1;
+		return nullptr;
+	}
+	fileSize = decompressedSize;
+	return result;
+#else
 	uintmax_t size;
 	if (!GetFileSize(path.c_str(), &size)) {
 		error = 1;
@@ -560,11 +636,36 @@ std::unique_ptr<std::byte[]> SaveReader::ReadFile(const char *filename, std::siz
 	}
 	std::fclose(file);
 	return result;
+#endif
 }
 
 bool SaveWriter::WriteFile(const char *filename, const std::byte *data, size_t size)
 {
+#ifdef __DREAMCAST__
+	if (dir_.empty()) {
+		return false;
+	}
+#endif
 	const std::string path = dir_ + filename;
+
+#ifdef __DREAMCAST__
+	// Use /ram/ for fast in-memory saves (no compression needed)
+	// Only use LZO compression for VMU paths which have limited space
+	if (dir_.find("/ram/") == 0) {
+		FILE *file = OpenFile(path.c_str(), "wb");
+		if (file == nullptr) {
+			return false;
+		}
+		if (std::fwrite(data, size, 1, file) != 1) {
+			std::fclose(file);
+			return false;
+		}
+		std::fclose(file);
+		return true;
+	}
+	// VMU path - use LZO compression
+	return dc::WriteCompressedFile(path.c_str(), data, size);
+#else
 	FILE *file = OpenFile(path.c_str(), "wb");
 	if (file == nullptr) {
 		return false;
@@ -575,6 +676,7 @@ bool SaveWriter::WriteFile(const char *filename, const std::byte *data, size_t s
 	}
 	std::fclose(file);
 	return true;
+#endif
 }
 
 void SaveWriter::RemoveHashEntries(bool (*fnGetName)(uint8_t, char *))
