@@ -412,19 +412,16 @@ cmake --build build
 
 <details><summary>Dreamcast</summary>
 
-### Dreamcast build
-
 ### Installing dependencies
 
-- KallistiOS (KOS) and kos-ports
-- `mkdcdisc` from antiruins tools
-- `patch` utility available on the host system
-- `Packaging/dreamcast/cd_root/` prepared with `IP.BIN`
-- No external `fmt` patch is required. DevilutionX applies a bundled SH4 fix during the Dreamcast build.
+- [KallistiOS](http://gamedev.allusion.net/softprj/kos/) (KOS) with kos-ports (SDL1, zlib, bzip2)
+- [`mkdcdisc`](https://gitlab.com/simulant/mkdcdisc) for CDI disc image creation
+
+No external `fmt` patch is required. The build applies a bundled SH4 fix automatically.
 
 ### Game data
 
-Put `DIABDAT.MPQ` in `Packaging/dreamcast/cd_root/` before building.
+Copy `DIABDAT.MPQ` to `Packaging/dreamcast/cd_root/` before building.
 If needed, see [Extracting MPQs from the GoG installer](https://github.com/diasurgical/devilutionX/wiki/Extracting-MPQs-from-the-GoG-installer).
 
 ### Compiling
@@ -433,12 +430,11 @@ If needed, see [Extracting MPQs from the GoG installer](https://github.com/diasu
 ./Packaging/dreamcast/build.sh
 ```
 
-### Output
+This builds the ELF, strips it, and packages a bootable CDI at `Packaging/dreamcast/devilutionx-playable.cdi`.
 
-- `Packaging/dreamcast/devilutionx-playable.cdi`
+Override tool paths with environment variables if needed: `KOS_BASE`, `KOS_ENV`, `MKDCDISC`.
 
-- [Dreamcast manual](/docs/manual/platforms/dreamcast.md)
-- [Dreamcast packaging readme](../Packaging/dreamcast/README.md)
+[Dreamcast manual](/docs/manual/platforms/dreamcast.md)
 </details>
 
 

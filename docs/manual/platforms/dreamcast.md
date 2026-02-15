@@ -10,19 +10,13 @@
 
 ## Building from Source
 
-The Dreamcast build applies a bundled `libfmt` SH4 patch automatically, so no external KOS `fmt` patch file is required.
-
-```bash
-./Packaging/dreamcast/build.sh
-```
-
-See also: `Packaging/dreamcast/README.md`
+See [building instructions](../../building.md#installing-dependencies-8).
 
 ## Controls
 
 - D-pad or analog stick: move hero
-- A: attack, interact, confirm
-- B: spell select, back
-- X: pickup and use nearby interactables
-- Y: cast selected spell
+- A: primary action (attack, interact, confirm)
+- B: secondary action, back
+- X: use item
+- Y: cancel, open speedbook
 - Start: menu
