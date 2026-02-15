@@ -55,6 +55,7 @@ sh-elf-strip -s "${BUILD_DIR}/${ELF_NAME}" -o "${BUILD_DIR}/${STRIPPED_NAME}"
 
 mkdir -p "${CD_ROOT}"
 cp "${BUILD_DIR}/${STRIPPED_NAME}" "${CD_ROOT}/${BIN_NAME}"
+cp "${BUILD_DIR}/devilutionx.mpq" "${CD_ROOT}/devilutionx.mpq"
 
 "${MKDCDISC}" -e "${CD_ROOT}/${BIN_NAME}" \
     -D "${CD_ROOT}" \

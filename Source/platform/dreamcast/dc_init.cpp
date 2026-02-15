@@ -41,13 +41,11 @@ bool InitDreamcast()
 {
 	paths::SetBasePath("/cd/");
 	CheckVmuAvailable();
-	if (g_vmuAvailable) {
-		paths::SetPrefPath(g_vmuPath);
-		paths::SetConfigPath(g_vmuPath);
-	} else {
-		paths::SetPrefPath("/ram/");
-		paths::SetConfigPath("/ram/");
-	}
+	// Use /ram/ for saves until VMU package headers are implemented.
+	// KOS VMUFS requires vmu_pkg_build() wrapping which dc_save_lzo
+	// doesn't do yet, so raw writes corrupt the roundtrip.
+	paths::SetPrefPath("/ram/");
+	paths::SetConfigPath("/ram/");
 
 	return true;
 }
