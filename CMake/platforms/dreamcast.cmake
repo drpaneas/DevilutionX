@@ -21,6 +21,9 @@ set(DEFAULT_AUDIO_BUFFER_SIZE 2048)
 set(DEFAULT_AUDIO_SAMPLE_RATE 22050)
 set(DEFAULT_AUDIO_RESAMPLING_QUALITY 0)
 
+# Disable per-pixel lighting - too expensive for the 200MHz SH4.
+set(DEFAULT_PER_PIXEL_LIGHTING 0)
+
 # Re-enable the 128KB palette transparency LUT for faster transparency blending.
 # With NOSOUND freeing audio RAM, we can afford this performance optimization.
 set(DEVILUTIONX_PALETTE_TRANSPARENCY_BLACK_16_LUT ON CACHE BOOL "" FORCE)
