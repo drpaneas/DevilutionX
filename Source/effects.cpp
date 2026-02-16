@@ -84,8 +84,10 @@ void StreamPlay(TSFX *pSFX, int lVolume, int lPan)
 			lVolume = VOLUME_MAX;
 #ifdef __DREAMCAST__
 		if (pSFX->pSnd == nullptr) {
+			music_mute();
 			EvictSoundsIfNeeded(pSFX, /*streamOnly=*/true, /*maxLoaded=*/8, /*targetLoaded=*/4);
 			pSFX->pSnd = sound_file_load(pSFX->pszName.c_str(), AllowStreaming);
+			music_unmute();
 		}
 		if (pSFX->pSnd != nullptr && pSFX->pSnd->DSB.IsLoaded())
 			pSFX->pSnd->DSB.PlayWithVolumeAndPan(lVolume, sound_get_or_set_sound_volume(1), lPan);
@@ -132,6 +134,7 @@ void PlaySfxPriv(TSFX *pSFX, bool loc, Point position)
 
 #ifdef __DREAMCAST__
 	if (pSFX->pSnd == nullptr) {
+		music_mute();
 		EvictSoundsIfNeeded(pSFX, /*streamOnly=*/false, /*maxLoaded=*/20, /*targetLoaded=*/15);
 		pSFX->pSnd = sound_file_load(pSFX->pszName.c_str());
 		// If loading failed (OOM), evict ALL non-playing sounds and retry once.
@@ -140,6 +143,7 @@ void PlaySfxPriv(TSFX *pSFX, bool loc, Point position)
 			ClearDuplicateSounds();
 			pSFX->pSnd = sound_file_load(pSFX->pszName.c_str());
 		}
+		music_unmute();
 	}
 #else
 	if (pSFX->pSnd == nullptr)
@@ -261,16 +265,7 @@ bool effect_is_playing(SfxID nSFX)
 void stream_stop()
 {
 	if (sgpStreamSFX != nullptr) {
-#ifdef __DREAMCAST__
-		// Dreamcast: Keep the loaded sound cached in memory.
-		// NPC speech loads from CD and takes seconds per file.
-		// By caching, repeat conversations are instant.
-		// Cached sounds are freed during level transitions in PrivSoundInit.
-		if (sgpStreamSFX->pSnd != nullptr)
-			sgpStreamSFX->pSnd->DSB.Stop();
-#else
 		sgpStreamSFX->pSnd = nullptr;
-#endif
 		sgpStreamSFX = nullptr;
 	}
 }
@@ -393,9 +388,16 @@ void effects_play_sound(SfxID id)
 int GetSFXLength(SfxID nSFX)
 {
 	TSFX &sfx = sgSFX[static_cast<int16_t>(nSFX)];
-	if (sfx.pSnd == nullptr)
+	if (sfx.pSnd == nullptr) {
+#ifdef __DREAMCAST__
+		music_mute();
+#endif
 		sfx.pSnd = sound_file_load(sfx.pszName.c_str(),
 		    /*stream=*/AllowStreaming && (sfx.bFlags & sfx_STREAM) != 0);
+#ifdef __DREAMCAST__
+		music_unmute();
+#endif
+	}
 	return sfx.pSnd->DSB.GetLength();
 }
 
