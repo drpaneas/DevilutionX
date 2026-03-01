@@ -27,7 +27,7 @@ set(DEVILUTIONX_PALETTE_TRANSPARENCY_BLACK_16_LUT ON CACHE BOOL "" FORCE)
 set(DEFAULT_WIDTH 640)
 set(DEFAULT_HEIGHT 480)
 
-# VMU saves use flat files with LZO compression
+# VMU saves use flat files with zlib compression
 set(UNPACKED_SAVES ON)
 
 set(DEVILUTIONX_GAMEPAD_TYPE Generic)
@@ -50,10 +50,17 @@ set(JOY_HAT_DPAD_RIGHT 2)
 set(JOY_AXIS_LEFTX 0)
 set(JOY_AXIS_LEFTY 1)
 
-add_subdirectory(3rdParty/minilzo)
-
 list(APPEND DEVILUTIONX_PLATFORM_SUBDIRECTORIES platform/dreamcast)
 list(APPEND DEVILUTIONX_PLATFORM_LINK_LIBRARIES libdevilutionx_dreamcast)
+
+# FindZLIB may not create this target during cross-compilation.
+if(NOT TARGET ZLIB::ZLIB)
+    add_library(ZLIB::ZLIB STATIC IMPORTED)
+    set_target_properties(ZLIB::ZLIB PROPERTIES
+        IMPORTED_LOCATION "${ZLIB_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIR}"
+    )
+endif()
 
 # FindBZip2 may not create this target during cross-compilation
 if(NOT TARGET BZip2::BZip2)

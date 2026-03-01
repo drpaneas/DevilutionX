@@ -705,6 +705,10 @@ void UiInitialize()
 void UiDestroy()
 {
 	UnloadFonts();
+#ifdef __DREAMCAST__
+	bgArtCache.clear();
+	bgArtCache.rehash(0);
+#endif
 	UnloadUiGFX();
 }
 
