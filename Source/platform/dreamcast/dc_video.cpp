@@ -24,15 +24,30 @@ namespace {
 // RGB565 palette lookup table (256 entries x 2 bytes = 512 bytes)
 // Aligned to 32 bytes for cache efficiency
 alignas(32) uint16_t palette565[256];
+// 32-bit word lookup tables used by the packed conversion path.
+alignas(32) uint32_t palette565FirstWord[256];
+alignas(32) uint32_t palette565SecondWord[256];
 
 bool initialized = false;
+
+inline void UpdatePaletteEntry(int index, uint16_t rgb565)
+{
+	palette565[index] = rgb565;
+#if SDL_BYTEORDER == SDL_LIL_ENDIAN
+	palette565FirstWord[index] = rgb565;
+	palette565SecondWord[index] = static_cast<uint32_t>(rgb565) << 16;
+#else
+	palette565FirstWord[index] = static_cast<uint32_t>(rgb565) << 16;
+	palette565SecondWord[index] = rgb565;
+#endif
+}
 
 /**
  * @brief Convert 16 pixels from 8bpp to 16bpp
  *
  * This is the innermost loop - fully unrolled for speed.
  */
-inline void Convert16Pixels(const uint8_t *src, uint16_t *dst)
+inline void Convert16PixelsScalar(const uint8_t *src, uint16_t *dst)
 {
 	dst[0] = palette565[src[0]];
 	dst[1] = palette565[src[1]];
@@ -52,15 +67,46 @@ inline void Convert16Pixels(const uint8_t *src, uint16_t *dst)
 	dst[15] = palette565[src[15]];
 }
 
+/**
+ * @brief Convert 16 pixels using packed 32-bit writes (2 pixels per store)
+ *
+ * SH4 is efficient at aligned 32-bit loads/stores, so this path halves
+ * the number of destination stores compared to scalar 16-bit writes.
+ */
+inline void Convert16PixelsPacked(const uint8_t *src, uint16_t *dst)
+{
+#if defined(__SH4__) || defined(__sh__)
+	// Pull upcoming source bytes into cache early on SH4.
+	__builtin_prefetch(src + 32, 0, 3);
+	__builtin_prefetch(src + 64, 0, 3);
+#endif
+	uint32_t *dst32 = reinterpret_cast<uint32_t *>(dst);
+	dst32[0] = palette565FirstWord[src[0]] | palette565SecondWord[src[1]];
+	dst32[1] = palette565FirstWord[src[2]] | palette565SecondWord[src[3]];
+	dst32[2] = palette565FirstWord[src[4]] | palette565SecondWord[src[5]];
+	dst32[3] = palette565FirstWord[src[6]] | palette565SecondWord[src[7]];
+	dst32[4] = palette565FirstWord[src[8]] | palette565SecondWord[src[9]];
+	dst32[5] = palette565FirstWord[src[10]] | palette565SecondWord[src[11]];
+	dst32[6] = palette565FirstWord[src[12]] | palette565SecondWord[src[13]];
+	dst32[7] = palette565FirstWord[src[14]] | palette565SecondWord[src[15]];
+}
+
 void ConvertFrame(const uint8_t *src, uint16_t *dst, int width, int height, int srcPitch, int dstPitch)
 {
 	for (int y = 0; y < height; y++) {
 		const uint8_t *srcRow = src + y * srcPitch;
 		uint16_t *dstRow = reinterpret_cast<uint16_t *>(reinterpret_cast<uint8_t *>(dst) + y * dstPitch);
+		const bool canUsePackedPath = (reinterpret_cast<uintptr_t>(dstRow) & (alignof(uint32_t) - 1)) == 0;
 
 		int x = 0;
-		for (; x + 16 <= width; x += 16) {
-			Convert16Pixels(srcRow + x, dstRow + x);
+		if (canUsePackedPath) {
+			for (; x + 16 <= width; x += 16) {
+				Convert16PixelsPacked(srcRow + x, dstRow + x);
+			}
+		} else {
+			for (; x + 16 <= width; x += 16) {
+				Convert16PixelsScalar(srcRow + x, dstRow + x);
+			}
 		}
 
 		for (; x < width; x++) {
@@ -74,7 +120,7 @@ void ConvertFrame(const uint8_t *src, uint16_t *dst, int width, int height, int 
 bool VideoInit([[maybe_unused]] int width, [[maybe_unused]] int height)
 {
 	for (int i = 0; i < 256; i++) {
-		palette565[i] = RGB888toRGB565(i, i, i);
+		UpdatePaletteEntry(i, RGB888toRGB565(i, i, i));
 	}
 
 	initialized = true;
@@ -104,7 +150,7 @@ void UpdatePaletteRange(const SDL_Color *colors, int firstColor, int nColors)
 
 	for (int i = 0; i < nColors; i++) {
 		const SDL_Color &c = colors[i];
-		palette565[firstColor + i] = RGB888toRGB565(c.r, c.g, c.b);
+		UpdatePaletteEntry(firstColor + i, RGB888toRGB565(c.r, c.g, c.b));
 	}
 }
 
