@@ -43,6 +43,10 @@
 
 #ifdef UNPACKED_SAVES
 #include "utils/file_util.h"
+#ifdef __DREAMCAST__
+#include "platform/dreamcast/dc_init.hpp"
+#include "platform/dreamcast/dc_save_lzo.hpp"
+#endif
 #else
 #include "mpq/mpq_reader.hpp"
 #endif
@@ -63,6 +67,19 @@ char hero_names[MAX_CHARACTERS][PlayerNameLength];
 
 std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 {
+#ifdef __DREAMCAST__
+	// Dreamcast VMU uses flat file structure - no directories.
+	// Save files become: /vmu/a1/dvx_s0_hero, /vmu/a1/dvx_s0_game, etc.
+	// Using underscore as separator instead of directory.
+	// "dvx" prefix identifies DevilutionX saves on VMU.
+	return StrCat(paths::PrefPath(), "dvx_", savePrefix,
+	    gbIsSpawn
+	        ? (gbIsMultiplayer ? "sh" : "sp") // share/spawn shortened for VMU
+	        : (gbIsMultiplayer ? "m" : "s"),  // multi/single shortened
+	    saveNum,
+	    gbIsHellfire ? "h_" : "_" // hellfire indicator + separator
+	);
+#else
 	return StrCat(paths::PrefPath(), savePrefix,
 	    gbIsSpawn
 	        ? (gbIsMultiplayer ? "share_" : "spawn_")
@@ -74,10 +91,17 @@ std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 	    gbIsHellfire ? ".hsv" : ".sv"
 #endif
 	);
+#endif
 }
 
 std::string GetStashSavePath()
 {
+#ifdef __DREAMCAST__
+	// Flat file for stash on Dreamcast
+	return StrCat(paths::PrefPath(), "dvx_",
+	    gbIsSpawn ? "stash_sp" : "stash",
+	    gbIsHellfire ? "h_" : "_");
+#else
 	return StrCat(paths::PrefPath(),
 	    gbIsSpawn ? "stash_spawn" : "stash",
 #ifdef UNPACKED_SAVES
@@ -86,6 +110,7 @@ std::string GetStashSavePath()
 	    gbIsHellfire ? ".hsv" : ".sv"
 #endif
 	);
+#endif
 }
 
 bool GetSaveNames(uint8_t index, std::string_view prefix, char *out)
@@ -138,16 +163,18 @@ bool ReadHero(SaveReader &archive, PlayerPack *pPack)
 	size_t read;
 
 	auto buf = ReadArchive(archive, "hero", &read);
-	if (buf == nullptr)
+	if (buf == nullptr) {
+		LogError("[DC Save] ReadHero: ReadArchive returned nullptr");
 		return false;
-
-	bool ret = false;
-	if (read == sizeof(*pPack)) {
-		memcpy(pPack, buf.get(), sizeof(*pPack));
-		ret = true;
 	}
 
-	return ret;
+	if (read != sizeof(*pPack)) {
+		LogError("[DC Save] ReadHero: size mismatch - decoded {} bytes, expected {}", read, sizeof(*pPack));
+		return false;
+	}
+
+	memcpy(pPack, buf.get(), sizeof(*pPack));
+	return true;
 }
 
 void EncodeHero(SaveWriter &saveWriter, const PlayerPack *pack)
@@ -157,7 +184,8 @@ void EncodeHero(SaveWriter &saveWriter, const PlayerPack *pack)
 
 	memcpy(packed.get(), pack, sizeof(*pack));
 	codec_encode(packed.get(), sizeof(*pack), packedLen, pfile_get_password());
-	saveWriter.WriteFile("hero", packed.get(), packedLen);
+	bool ok = saveWriter.WriteFile("hero", packed.get(), packedLen);
+	LogVerbose("[DC Save] EncodeHero: sizeof(PlayerPack)={} encoded={} write={}", sizeof(*pack), packedLen, ok ? "ok" : "FAILED");
 }
 
 SaveWriter GetSaveWriter(uint32_t saveNum)
@@ -243,8 +271,42 @@ bool ArchiveContainsGame(SaveReader &hsArchive)
 std::optional<SaveReader> CreateSaveReader(std::string &&path)
 {
 #ifdef UNPACKED_SAVES
+#ifdef __DREAMCAST__
+	if (path.empty())
+		return std::nullopt;
+	// Path is a file prefix (e.g., "/ram/dvx_s0_").
+	// Check if the hero file exists in /ram/ first.
+	const std::string heroPath = path + "hero";
+	if (!FileExists(heroPath)) {
+		if (dc::IsVmuAvailable() && path.find("/ram/") == 0) {
+			std::string vmuFilename = path.substr(5) + "hero"; // strip "/ram/"
+			size_t heroSize = 0;
+			auto heroData = dc::ReadFromVmu(dc::GetVmuPath(), vmuFilename.c_str(), heroSize);
+			if (!heroData || heroSize == 0) {
+				LogVerbose("[DC Save] No hero on VMU for {}", vmuFilename);
+				return std::nullopt;
+			}
+			LogVerbose("[DC Save] Restored {} bytes from VMU ({})", heroSize, vmuFilename);
+			FILE *file = OpenFile(heroPath.c_str(), "wb");
+			if (file == nullptr) {
+				LogError("[DC Save] Cannot write restored hero to {}", heroPath);
+				return std::nullopt;
+			}
+			bool ok = std::fwrite(heroData.get(), heroSize, 1, file) == 1;
+			std::fclose(file);
+			if (!ok) {
+				LogError("[DC Save] fwrite failed restoring hero to {}", heroPath);
+				return std::nullopt;
+			}
+		} else {
+			return std::nullopt;
+		}
+	}
+#else
+	// For other platforms, path is a directory
 	if (!FileExists(path))
 		return std::nullopt;
+#endif
 	return SaveReader(std::move(path));
 #else
 	std::int32_t error;
@@ -541,6 +603,52 @@ std::unique_ptr<std::byte[]> SaveReader::ReadFile(const char *filename, std::siz
 	std::unique_ptr<std::byte[]> result;
 	error = 0;
 	const std::string path = dir_ + filename;
+
+#ifdef __DREAMCAST__
+	if (dir_.find("/ram/") == 0) {
+		FILE *file = OpenFile(path.c_str(), "rb");
+		if (file == nullptr) {
+			LogError("[DC Save] Cannot open {} for reading", path);
+			error = 1;
+			return nullptr;
+		}
+		std::fseek(file, 0, SEEK_END);
+		long fileLen = std::ftell(file);
+		std::fseek(file, 0, SEEK_SET);
+		if (fileLen <= 0) {
+			LogError("[DC Save] Empty or invalid file {}: ftell={}", path, fileLen);
+			std::fclose(file);
+			error = 1;
+			return nullptr;
+		}
+		size_t size = static_cast<size_t>(fileLen);
+		fileSize = size;
+		result.reset(new (std::nothrow) std::byte[size]);
+		if (!result) {
+			LogError("[DC Save] Allocation failed for {} bytes from {}", size, path);
+			std::fclose(file);
+			error = 1;
+			return nullptr;
+		}
+		size_t bytesRead = std::fread(result.get(), 1, size, file);
+		std::fclose(file);
+		if (bytesRead != size) {
+			LogError("[DC Save] Short read {}: expected {} got {}", path, size, bytesRead);
+			error = 1;
+			return nullptr;
+		}
+		return result;
+	}
+	// VMU path - LZO compressed
+	size_t decompressedSize = 0;
+	result = dc::ReadCompressedFile(path.c_str(), decompressedSize);
+	if (!result) {
+		error = 1;
+		return nullptr;
+	}
+	fileSize = decompressedSize;
+	return result;
+#else
 	uintmax_t size;
 	if (!GetFileSize(path.c_str(), &size)) {
 		error = 1;
@@ -560,11 +668,44 @@ std::unique_ptr<std::byte[]> SaveReader::ReadFile(const char *filename, std::siz
 	}
 	std::fclose(file);
 	return result;
+#endif
 }
 
 bool SaveWriter::WriteFile(const char *filename, const std::byte *data, size_t size)
 {
+#ifdef __DREAMCAST__
+	if (dir_.empty()) {
+		return false;
+	}
+#endif
 	const std::string path = dir_ + filename;
+
+#ifdef __DREAMCAST__
+	if (dir_.find("/ram/") == 0) {
+		FILE *file = OpenFile(path.c_str(), "wb");
+		if (file == nullptr) {
+			LogError("[DC Save] WriteFile: cannot open {} for writing", path);
+			return false;
+		}
+		if (std::fwrite(data, size, 1, file) != 1) {
+			LogError("[DC Save] WriteFile: fwrite failed for {} ({} bytes)", path, size);
+			std::fclose(file);
+			return false;
+		}
+		std::fclose(file);
+		LogVerbose("[DC Save] WriteFile: wrote {} bytes to {}", size, path);
+
+		// Also persist hero data to VMU so the character survives
+		// across Flycast/console restarts (/ram/ is volatile).
+		if (std::strcmp(filename, "hero") == 0 && dc::IsVmuAvailable()) {
+			std::string vmuFilename = dir_.substr(5) + filename; // strip "/ram/"
+			dc::WriteToVmu(dc::GetVmuPath(), vmuFilename.c_str(), data, size);
+		}
+		return true;
+	}
+	// VMU path - use LZO compression
+	return dc::WriteCompressedFile(path.c_str(), data, size);
+#else
 	FILE *file = OpenFile(path.c_str(), "wb");
 	if (file == nullptr) {
 		return false;
@@ -575,6 +716,7 @@ bool SaveWriter::WriteFile(const char *filename, const std::byte *data, size_t s
 	}
 	std::fclose(file);
 	return true;
+#endif
 }
 
 void SaveWriter::RemoveHashEntries(bool (*fnGetName)(uint8_t, char *))
@@ -603,12 +745,20 @@ std::unique_ptr<std::byte[]> ReadArchive(SaveReader &archive, const char *pszNam
 	std::size_t length;
 
 	std::unique_ptr<std::byte[]> result = archive.ReadFile(pszName, length, error);
-	if (error != 0)
+	if (error != 0) {
+		LogError("[DC Save] ReadArchive: ReadFile('{}') failed, error={}", pszName, error);
 		return nullptr;
+	}
+
+	LogVerbose("[DC Save] ReadArchive: ReadFile('{}') ok, length={}", pszName, length);
 
 	const std::size_t decodedLength = codec_decode(result.get(), length, pfile_get_password());
-	if (decodedLength == 0)
+	if (decodedLength == 0) {
+		LogError("[DC Save] ReadArchive: codec_decode failed for '{}' (length={})", pszName, length);
 		return nullptr;
+	}
+
+	LogVerbose("[DC Save] ReadArchive: decoded '{}' -> {} bytes", pszName, decodedLength);
 
 	if (pdwLen != nullptr)
 		*pdwLen = decodedLength;
