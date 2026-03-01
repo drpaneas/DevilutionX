@@ -410,6 +410,7 @@ cmake --build build
 [PlayStation Vita manual](/docs/manual/platforms/vita.md)
 </details>
 
+<a id="dreamcast"></a>
 <details><summary>Dreamcast</summary>
 
 ### Installing dependencies

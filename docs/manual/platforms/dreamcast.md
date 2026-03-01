@@ -10,7 +10,7 @@
 
 ## Building from Source
 
-See [building instructions](../../building.md#installing-dependencies-8).
+See [building instructions](../../building.md#dreamcast).
 
 ## Controls
 

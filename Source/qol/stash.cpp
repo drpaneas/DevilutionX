@@ -28,6 +28,7 @@
 #include "minitext.h"
 #include "stores.h"
 #include "utils/display.h"
+#include "utils/log.hpp"
 #include "utils/format_int.hpp"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
@@ -283,7 +284,7 @@ void InitStash()
 {
 #ifdef __DREAMCAST__
 	// Skip stash UI loading on Dreamcast to save memory.
-	SDL_Log("Stash UI disabled on Dreamcast to conserve RAM");
+	LogVerbose("Stash UI disabled on Dreamcast to conserve RAM");
 	return;
 #endif
 	if (!HeadlessMode) {

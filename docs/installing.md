@@ -181,7 +181,7 @@ If you'd like to use this option, scan the QR code below.
 - Copy MPQ files to `Packaging/dreamcast/cd_root/` before building:
   - Required: `DIABDAT.MPQ`
   - Optional: `spawn.mpq`
-- Follow [Dreamcast build instructions](building.md#dreamcast-build).
+- Follow [Dreamcast build instructions](building.md#dreamcast).
 - See [Dreamcast packaging readme](../Packaging/dreamcast/README.md).
 
 </details>

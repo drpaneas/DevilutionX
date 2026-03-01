@@ -24,7 +24,7 @@ if(DREAMCAST)
   FetchContent_Declare_ExcludeFromAll(libfmt
     URL https://github.com/fmtlib/fmt/releases/download/12.0.0/fmt-12.0.0.zip
     URL_HASH SHA256=1c32293203449792bf8e94c7f6699c643887e826f2d66a80869b4f279fb07d25
-    PATCH_COMMAND "${DREAMCAST_PATCH_EXECUTABLE}" -p1 -i "${DREAMCAST_FMT_PATCH}"
+    PATCH_COMMAND "${DREAMCAST_PATCH_EXECUTABLE}" -p1 -N -i "${DREAMCAST_FMT_PATCH}"
   )
 else()
   FetchContent_Declare_ExcludeFromAll(libfmt

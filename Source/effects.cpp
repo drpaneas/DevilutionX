@@ -398,6 +398,8 @@ int GetSFXLength(SfxID nSFX)
 		music_unmute();
 #endif
 	}
+	if (sfx.pSnd == nullptr)
+		return 0;
 	return sfx.pSnd->DSB.GetLength();
 }
 

@@ -4,6 +4,8 @@
  */
 #pragma once
 
+#ifdef __DREAMCAST__
+
 namespace devilution {
 namespace dc {
 
@@ -38,3 +40,5 @@ const char *GetVmuPath();
 
 } // namespace dc
 } // namespace devilution
+
+#endif // __DREAMCAST__

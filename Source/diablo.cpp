@@ -1224,10 +1224,6 @@ void CheckArchivesUpToDate()
 
 void ApplicationInit()
 {
-#ifdef __DREAMCAST__
-	GetOptions().Graphics.perPixelLighting.SetValue(false);
-	GetOptions().Graphics.colorCycling.SetValue(false);
-#endif
 	if (*GetOptions().Graphics.showFPS)
 		EnableFrameCount();
 

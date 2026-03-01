@@ -59,7 +59,6 @@ cp "${BUILD_DIR}/devilutionx.mpq" "${CD_ROOT}/devilutionx.mpq"
 
 "${MKDCDISC}" -e "${CD_ROOT}/${BIN_NAME}" \
     -D "${CD_ROOT}" \
-    -p "${CD_ROOT}/IP.BIN" \
     -o "${SCRIPT_DIR}/devilutionx-playable.cdi" \
     -n "DevilutionX"
 

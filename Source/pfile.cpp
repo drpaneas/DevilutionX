@@ -74,7 +74,7 @@ bool IsRamSavePath(std::string_view path)
 uint64_t HashSaveEntryKey(std::string_view key)
 {
 	// FNV-1a 64-bit hash for deterministic, compact VMU file keys.
-	uint64_t hash = 1469598103934665603ULL;
+	uint64_t hash = 14695981039346656037ULL;
 	for (const char ch : key) {
 		hash ^= static_cast<uint8_t>(ch);
 		hash *= 1099511628211ULL;
@@ -245,18 +245,16 @@ bool ReadHero(SaveReader &archive, PlayerPack *pPack)
 	size_t read;
 
 	auto buf = ReadArchive(archive, "hero", &read);
-	if (buf == nullptr) {
-		LogError("[DC Save] ReadHero: ReadArchive returned nullptr");
+	if (buf == nullptr)
 		return false;
+
+	bool ret = false;
+	if (read == sizeof(*pPack)) {
+		memcpy(pPack, buf.get(), sizeof(*pPack));
+		ret = true;
 	}
 
-	if (read != sizeof(*pPack)) {
-		LogError("[DC Save] ReadHero: size mismatch - decoded {} bytes, expected {}", read, sizeof(*pPack));
-		return false;
-	}
-
-	memcpy(pPack, buf.get(), sizeof(*pPack));
-	return true;
+	return ret;
 }
 
 void EncodeHero(SaveWriter &saveWriter, const PlayerPack *pack)
@@ -266,8 +264,7 @@ void EncodeHero(SaveWriter &saveWriter, const PlayerPack *pack)
 
 	memcpy(packed.get(), pack, sizeof(*pack));
 	codec_encode(packed.get(), sizeof(*pack), packedLen, pfile_get_password());
-	bool ok = saveWriter.WriteFile("hero", packed.get(), packedLen);
-	LogVerbose("[DC Save] EncodeHero: sizeof(PlayerPack)={} encoded={} write={}", sizeof(*pack), packedLen, ok ? "ok" : "FAILED");
+	saveWriter.WriteFile("hero", packed.get(), packedLen);
 }
 
 SaveWriter GetSaveWriter(uint32_t saveNum)
@@ -824,20 +821,12 @@ std::unique_ptr<std::byte[]> ReadArchive(SaveReader &archive, const char *pszNam
 	std::size_t length;
 
 	std::unique_ptr<std::byte[]> result = archive.ReadFile(pszName, length, error);
-	if (error != 0) {
-		LogError("[DC Save] ReadArchive: ReadFile('{}') failed, error={}", pszName, error);
+	if (error != 0)
 		return nullptr;
-	}
-
-	LogVerbose("[DC Save] ReadArchive: ReadFile('{}') ok, length={}", pszName, length);
 
 	const std::size_t decodedLength = codec_decode(result.get(), length, pfile_get_password());
-	if (decodedLength == 0) {
-		LogError("[DC Save] ReadArchive: codec_decode failed for '{}' (length={})", pszName, length);
+	if (decodedLength == 0)
 		return nullptr;
-	}
-
-	LogVerbose("[DC Save] ReadArchive: decoded '{}' -> {} bytes", pszName, decodedLength);
 
 	if (pdwLen != nullptr)
 		*pdwLen = decodedLength;
