@@ -281,6 +281,11 @@ void FreeStashGFX()
 
 void InitStash()
 {
+#ifdef __DREAMCAST__
+	// Skip stash UI loading on Dreamcast to save memory.
+	SDL_Log("Stash UI disabled on Dreamcast to conserve RAM");
+	return;
+#endif
 	if (!HeadlessMode) {
 		StashPanelArt = LoadClx("data\\stash.clx");
 		StashNavButtonArt = LoadClx("data\\stashnavbtns.clx");
